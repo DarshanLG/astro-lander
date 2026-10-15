@@ -1,0 +1,8 @@
+gymnasium[box2d]==1.4.0
+torch>=2.2
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+imageio>=2.34
+stable-baselines3>=2.3   # baseline comparison only
+pytest>=8

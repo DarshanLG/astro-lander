@@ -1,0 +1,455 @@
+<title>Astro Lander</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one simulator console. Flight view left, controls + network readout right; stacks on phones.
+   Single dark look by choice: it is a flight-sim screen at dusk, like the launch-site lighting. */
+:root {
+  color-scheme: dark;
+  --sky-top: #141a33;
+  --sky-low: #2a2547;
+  --ground: #0d1020;
+  --panel: #171c33;
+  --panel-2: #1f2541;
+  --line: #313a63;
+  --fg: #e7e9f4;
+  --muted: #9aa1c4;
+  --accent: #ffad4a;      /* sodium-lamp orange: thrust, highlights */
+  --accent-ink: #1b1308;
+  --good: #5fd39b;
+  --bad: #ff6b6b;
+  --cool: #7aa7ff;        /* network / data */
+  --display: "Oxanium", "Trebuchet MS", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--ground); color: var(--fg); }
+body {
+  font: 15px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 { font: 700 clamp(26px, 4vw, 38px)/1.05 var(--display); letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.lede { color: var(--muted); margin: 0; max-width: 62ch; }
+.console { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .console { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--sky-top); }
+canvas#sim { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; max-width: 100%; }
+.hud { position: absolute; inset: 10px 12px auto 12px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; font-family: var(--mono); font-size: 12px; }
+.score { background: rgba(10, 12, 26, 0.72); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-width: 104px; }
+.score b { display: block; font: 700 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.score b.pos { color: var(--good); } .score b.neg { color: var(--bad); }
+.score small { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
+.telemetry { background: rgba(10, 12, 26, 0.72); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.telemetry span { color: var(--fg); }
+.banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font: 700 clamp(20px, 4vw, 34px)/1 var(--display); letter-spacing: 0.06em; padding: 10px 18px; border-radius: 8px; background: rgba(10, 12, 26, 0.8); border: 1px solid var(--line); text-transform: uppercase; }
+.banner.good { color: var(--good); } .banner.bad { color: var(--bad); } .banner.warn { color: var(--accent); }
+.stagebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.stagebar .spacer { flex: 1; }
+.tally { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tally b { color: var(--fg); font-weight: 500; }
+
+button, .seg label { font: 500 13px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px; cursor: pointer; }
+button:hover, .seg label:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:focus-visible, input:focus-visible + label, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: progress; }
+
+aside { display: grid; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+.card h2 { font: 600 11px/1 var(--body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; padding: 9px 4px; }
+.seg input:checked + label { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.agentnote { color: var(--muted); font-size: 13px; margin: 0; min-height: 3em; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
+.slider output { font-family: var(--mono); font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets button { padding: 7px 10px; font-size: 12px; }
+
+.brain { display: grid; gap: 10px; }
+.bars { display: grid; grid-template-columns: 74px 1fr 52px; gap: 4px 8px; align-items: center; font-size: 12px; }
+.bars .lab { color: var(--muted); }
+.bars .val { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.track { height: 8px; background: var(--panel-2); border-radius: 4px; position: relative; overflow: hidden; }
+.track i { position: absolute; top: 0; bottom: 0; background: var(--cool); border-radius: 4px; }
+.track.center::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line); }
+.acts .track i { background: var(--muted); }
+.acts .on .track i { background: var(--accent); }
+.acts .on .lab, .acts .on .val { color: var(--accent); }
+canvas#net { width: 100%; height: auto; aspect-ratio: 312 / 150; display: block; }
+
+.batch { display: grid; gap: 8px; }
+.batch p { margin: 0; color: var(--muted); font-size: 13px; }
+.result { font-family: var(--mono); font-size: 13px; background: var(--panel-2); border-radius: 6px; padding: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; font-variant-numeric: tabular-nums; }
+.result b { display: block; font: 700 20px/1.1 var(--display); }
+.result small { color: var(--muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.keys { font-size: 12px; color: var(--muted); }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+footer { color: var(--muted); font-size: 12.5px; max-width: 80ch; }
+footer a { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Astro<span>/</span>Lander</h1>
+    <p class="lede">A rocket-landing agent trained with reinforcement learning (PPO, written from scratch), running live in your browser. Change the wind and gravity and see whether it still lands.</p>
+  </header>
+
+  <div class="console">
+    <section>
+      <div class="stage">
+        <canvas id="sim" width="900" height="600" aria-label="Lunar lander simulation"></canvas>
+        <div class="hud">
+          <div class="score"><small>Score</small><b id="score">0</b></div>
+          <div class="telemetry">
+            alt <span id="t-alt">0.00</span> · vel <span id="t-vel">0.00</span><br>
+            tilt <span id="t-tilt">0°</span> · fuel <span id="t-fuel">0.0</span><br>
+            wind <span id="t-wind">off</span> · g <span id="t-g">-10.0</span>
+          </div>
+        </div>
+        <div class="banner" id="banner" hidden></div>
+        <div class="stagebar">
+          <button class="primary" id="btn-new">New landing</button>
+          <button id="btn-pause">Pause</button>
+          <button id="btn-speed">Speed 1×</button>
+          <span class="spacer"></span>
+          <span class="tally">this session: <b id="tl-land">0</b> landed · <b id="tl-crash">0</b> crashed · <b id="tl-to">0</b> timed out</span>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Pilot</h2>
+        <div class="seg" role="radiogroup" aria-label="Pilot">
+          <input type="radio" name="pilot" id="p-robust" value="robust" checked><label for="p-robust">Robust AI</label>
+          <input type="radio" name="pilot" id="p-nominal" value="nominal"><label for="p-nominal">Calm-trained AI</label>
+          <input type="radio" name="pilot" id="p-human" value="human"><label for="p-human">You</label>
+        </div>
+        <p class="agentnote" id="pilot-note"></p>
+      </div>
+
+      <div class="card">
+        <h2>Conditions</h2>
+        <div class="slider"><label for="s-wind">Wind power</label><output id="o-wind">0</output><input type="range" id="s-wind" min="0" max="20" step="1" value="0"></div>
+        <div class="slider"><label for="s-turb">Turbulence</label><output id="o-turb">0.0</output><input type="range" id="s-turb" min="0" max="2" step="0.1" value="0"></div>
+        <div class="slider"><label for="s-grav">Gravity (m/s²)</label><output id="o-grav">-10.0</output><input type="range" id="s-grav" min="-12" max="-4" step="0.5" value="-10"></div>
+        <div class="presets">
+          <button data-preset="calm">Calm moon</button>
+          <button data-preset="gusty">Gusty</button>
+          <button data-preset="storm">Storm</button>
+          <button data-preset="heavy">Heavy planet</button>
+        </div>
+      </div>
+
+      <div class="card brain">
+        <h2>What the network sees</h2>
+        <div class="bars" id="obs-bars"></div>
+        <canvas id="net" width="624" height="300" aria-label="Neural network activations"></canvas>
+        <h2>What it decides</h2>
+        <div class="bars acts" id="act-bars"></div>
+      </div>
+
+      <div class="card batch">
+        <h2>Stress test</h2>
+        <p>Fly 50 landings at full speed in the current conditions, with no rendering.</p>
+        <button id="btn-batch">Run 50 landings</button>
+        <div class="result" id="batch-result" hidden></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    Physics: Gymnasium's LunarLander-v3, ported line-for-line from Python Box2D to planck.js. The agents were trained in Python and never saw this engine, so a good landing here also shows the policy transferring to a different simulator.
+    Both pilots use the same 8 → 64 → 64 → 4 network. "Robust AI" was trained with random gravity, wind and turbulence on every episode. "Calm-trained AI" only ever flew with default gravity and no wind.
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/planck@1.0.6/dist/planck.min.js"></script>
+<script src="lander.js"></script>
+<script>
+(() => {
+  "use strict";
+  const { LunarLander, MLPPolicy, consts: C } = window.LunarLanderJS;
+  const $ = (id) => document.getElementById(id);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const ACTIONS = ["Coast", "Left jet", "Main engine", "Right jet"];
+  const OBS = [["x pos", true], ["y pos", false], ["x vel", true], ["y vel", true], ["tilt", true], ["spin", true], ["L leg", false], ["R leg", false]];
+  const NOTES = {
+    robust: "Trained on 2M steps with gravity, wind and turbulence randomized every episode. Turn the storm up.",
+    nominal: "Trained on 1M steps in calm conditions only. Strong at what it has seen, and it can struggle in wind.",
+    human: "Your turn. Arrow keys: ↑ main engine, ← → steer. On a touch screen, hold the left, middle or right third of the flight view.",
+  };
+
+  const state = { pilot: "robust", policies: {}, paused: false, speed: 1, env: null, obs: null, score: 0, fuel: 0,
+    done: false, outcome: null, keys: new Set(), lastAct: null, tally: { landed: 0, crashed: 0, timeout: 0 } };
+
+  // --------------------------------------------------------- conditions
+  const cond = () => ({ windPower: +$("s-wind").value, turbulencePower: +$("s-turb").value, gravity: +$("s-grav").value });
+  function syncOutputs() {
+    const c = cond();
+    $("o-wind").textContent = c.windPower.toFixed(0);
+    $("o-turb").textContent = c.turbulencePower.toFixed(1);
+    $("o-grav").textContent = c.gravity.toFixed(1);
+  }
+  const PRESETS = { calm: [0, 0, -10], gusty: [10, 0.8, -10], storm: [18, 1.8, -10], heavy: [6, 0.5, -11.5] };
+
+  // --------------------------------------------------------- episode control
+  function newEpisode(seed) {
+    const c = cond();
+    state.env = new LunarLander({ continuous: false, gravity: c.gravity, enableWind: c.windPower > 0 || c.turbulencePower > 0,
+      windPower: c.windPower, turbulencePower: c.turbulencePower });
+    state.obs = state.env.reset(seed);
+    state.score = 0; state.fuel = 0; state.done = false; state.outcome = null;
+    $("banner").hidden = true;
+  }
+
+  function chooseAction() {
+    if (state.pilot === "human") {
+      const k = state.keys;
+      const a = k.has("ArrowUp") ? 2 : k.has("ArrowLeft") ? 3 : k.has("ArrowRight") ? 1 : 0;
+      state.lastAct = { action: a, out: null, activations: null };
+      return a;
+    }
+    const pol = state.policies[state.pilot];
+    if (!pol) return 0;
+    state.lastAct = pol.act(state.obs);
+    return state.lastAct.action;
+  }
+
+  function tick() {
+    if (state.done) return;
+    const a = chooseAction();
+    const r = state.env.step(a);
+    state.obs = r.obs; state.score += r.reward;
+    state.fuel += a === 2 ? 0.3 : a === 1 || a === 3 ? 0.03 : 0;
+    if (r.terminated || r.truncated) {
+      state.done = true; state.outcome = r.outcome;
+      const onPad = r.outcome === "landed" && Math.abs(r.obs[0]) <= 0.2;
+      const b = $("banner");
+      b.className = "banner " + (r.outcome === "landed" ? "good" : r.outcome === "timeout" ? "warn" : "bad");
+      b.textContent = r.outcome === "landed" ? (onPad ? "Landed on the pad" : "Landed off the pad")
+        : r.outcome === "timeout" ? "Out of time" : r.outcome === "out_of_bounds" ? "Flew off screen" : "Crashed";
+      b.hidden = false;
+      const key = r.outcome === "landed" ? "landed" : r.outcome === "timeout" ? "timeout" : "crashed";
+      state.tally[key]++;
+      $("tl-land").textContent = state.tally.landed; $("tl-crash").textContent = state.tally.crashed; $("tl-to").textContent = state.tally.timeout;
+      clearTimeout(state.restartT);
+      if (state.pilot !== "human") state.restartT = setTimeout(() => newEpisode(), 2200);
+    }
+  }
+
+  // --------------------------------------------------------- rendering
+  const sim = $("sim"), g = sim.getContext("2d");
+  const PX = sim.width / C.W; // pixels per meter
+  const tx = (x) => x * PX, ty = (y) => sim.height - y * PX;
+  // fixed starfield
+  const stars = Array.from({ length: 90 }, (_, i) => [((i * 7919) % 900), ((i * 104729) % 330), (i % 5) / 5]);
+
+  function drawPoly(body, fill, stroke) {
+    for (let f = body.getFixtureList(); f; f = f.getNext()) {
+      const s = f.getShape(); if (!s.m_vertices) continue;
+      g.beginPath();
+      s.m_vertices.forEach((v, i) => { const p = body.getWorldPoint(v); i ? g.lineTo(tx(p.x), ty(p.y)) : g.moveTo(tx(p.x), ty(p.y)); });
+      g.closePath(); g.fillStyle = fill; g.fill(); g.lineWidth = 2; g.strokeStyle = stroke; g.stroke();
+    }
+  }
+
+  function render() {
+    const e = state.env; if (!e) return;
+    const sky = g.createLinearGradient(0, 0, 0, sim.height);
+    sky.addColorStop(0, css("--sky-top")); sky.addColorStop(1, css("--sky-low"));
+    g.fillStyle = sky; g.fillRect(0, 0, sim.width, sim.height);
+    g.fillStyle = css("--fg");
+    for (const [x, y, b] of stars) { g.globalAlpha = 0.25 + 0.5 * b; g.fillRect(x, y, 1.6, 1.6); }
+    g.globalAlpha = 1;
+
+    // terrain
+    g.beginPath(); g.moveTo(0, sim.height);
+    e.terrain.forEach(([p1, p2], i) => { if (!i) g.lineTo(tx(p1[0]), ty(p1[1])); g.lineTo(tx(p2[0]), ty(p2[1])); });
+    g.lineTo(sim.width, sim.height); g.closePath();
+    g.fillStyle = css("--ground"); g.fill(); g.strokeStyle = css("--line"); g.lineWidth = 2; g.stroke();
+
+    // helipad
+    const padY = ty(e.helipadY);
+    g.strokeStyle = css("--accent"); g.lineWidth = 3;
+    g.beginPath(); g.moveTo(tx(e.helipadX1), padY); g.lineTo(tx(e.helipadX2), padY); g.stroke();
+    for (const x of [e.helipadX1, e.helipadX2]) {
+      g.strokeStyle = css("--muted"); g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(tx(x), padY); g.lineTo(tx(x), padY - 50); g.stroke();
+      g.fillStyle = css("--accent"); g.beginPath(); g.moveTo(tx(x), padY - 50); g.lineTo(tx(x), padY - 40); g.lineTo(tx(x) + 18, padY - 45); g.fill();
+    }
+
+    // wind streaks
+    if (Math.abs(e.windMag) > 0.5) {
+      g.strokeStyle = css("--muted"); g.globalAlpha = Math.min(0.5, Math.abs(e.windMag) / 30); g.lineWidth = 1;
+      const t = performance.now() / 6, dir = Math.sign(e.windMag), len = 20 + Math.abs(e.windMag) * 2;
+      for (let i = 0; i < 14; i++) {
+        const y = 30 + ((i * 53) % 300), x = ((t * dir * (1 + (i % 3) * 0.3) + i * 97) % (sim.width + 100) + sim.width + 100) % (sim.width + 100) - 50;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x - dir * len, y); g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+
+    // exhaust
+    for (const p of e.particles) {
+      g.globalAlpha = Math.max(0, p.life);
+      g.fillStyle = p.big ? css("--accent") : css("--fg");
+      g.beginPath(); g.arc(tx(p.x), ty(p.y), p.big ? 4 + 3 * (1 - p.life) : 2, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    for (const leg of e.legs) drawPoly(leg, css("--panel-2"), css("--muted"));
+    drawPoly(e.lander, css("--fg"), css("--line"));
+    // window
+    const w = e.lander.getWorldPoint(planck.Vec2(0, 6 / C.SCALE));
+    g.fillStyle = css("--cool"); g.beginPath(); g.arc(tx(w.x), ty(w.y), 5, 0, Math.PI * 2); g.fill();
+
+    // HUD
+    const o = state.obs;
+    const sc = $("score"); sc.textContent = (state.score >= 0 ? "+" : "") + Math.round(state.score);
+    sc.className = state.score >= 0 ? "pos" : "neg";
+    $("t-alt").textContent = o[1].toFixed(2);
+    $("t-vel").textContent = Math.hypot(o[2], o[3]).toFixed(2);
+    $("t-tilt").textContent = Math.round(o[4] * 57.3) + "°";
+    $("t-fuel").textContent = state.fuel.toFixed(1);
+    $("t-wind").textContent = e.enableWind ? (e.windMag >= 0 ? "→ " : "← ") + Math.abs(e.windMag).toFixed(1) : "off";
+    $("t-g").textContent = e.gravity.toFixed(1);
+    renderBrain();
+  }
+
+  // --------------------------------------------------------- network readout
+  function buildBars(el, rows) {
+    el.innerHTML = rows.map(([lab, center], i) =>
+      `<div class="row" data-i="${i}" style="display:contents"><span class="lab">${lab}</span><span class="track${center ? " center" : ""}"><i></i></span><span class="val">0</span></div>`).join("");
+    return [...el.querySelectorAll(".row")].map((r) => ({ row: r, bar: r.querySelector("i"), val: r.querySelector(".val") }));
+  }
+  const obsBars = buildBars($("obs-bars"), OBS);
+  const actBars = buildBars($("act-bars"), ACTIONS.map((a) => [a, false]));
+
+  const net = $("net"), n = net.getContext("2d");
+  function renderBrain() {
+    const o = state.obs;
+    obsBars.forEach(({ bar, val }, i) => {
+      const v = Math.max(-1, Math.min(1, o[i])), center = OBS[i][1];
+      if (center) { bar.style.left = (v < 0 ? 50 + v * 50 : 50) + "%"; bar.style.width = Math.abs(v) * 50 + "%"; }
+      else { bar.style.left = "0"; bar.style.width = Math.max(0, v) * 100 + "%"; }
+      val.textContent = o[i].toFixed(2);
+    });
+    const la = state.lastAct;
+    let probs = [0, 0, 0, 0];
+    if (la && la.out) { const m = Math.max(...la.out); const ex = la.out.map((v) => Math.exp(v - m)); const s = ex.reduce((a, b) => a + b, 0); probs = ex.map((v) => v / s); }
+    else if (la) probs[la.action] = 1;
+    actBars.forEach(({ row, bar, val }, i) => {
+      bar.style.left = "0"; bar.style.width = probs[i] * 100 + "%"; val.textContent = Math.round(probs[i] * 100) + "%";
+      row.classList.toggle("on", !!la && la.action === i);
+      row.querySelectorAll("span").forEach((s) => s.classList.toggle("on", !!la && la.action === i));
+    });
+    // neuron diagram: 8 inputs, 2 hidden layers (sampled 16 neurons each), 4 outputs
+    const W = net.width, H = net.height;
+    n.clearRect(0, 0, W, H);
+    const layers = [o.slice(0, 8).map((v) => Math.tanh(v))];
+    if (la && la.activations) {
+      layers.push(la.activations[0].filter((_, i) => i % 4 === 0), la.activations[1].filter((_, i) => i % 4 === 0), probs.map((p) => p * 2 - 1));
+    } else layers.push(Array(16).fill(0), Array(16).fill(0), probs.map((p) => p * 2 - 1));
+    const xs = layers.map((_, i) => 30 + (i * (W - 60)) / (layers.length - 1));
+    const pos = layers.map((L, li) => L.map((_, j) => [xs[li], 18 + ((j + 0.5) * (H - 36)) / L.length]));
+    n.lineWidth = 1;
+    for (let li = 0; li < layers.length - 1; li++) {
+      for (let a = 0; a < pos[li].length; a++) for (let b = 0; b < pos[li + 1].length; b++) {
+        const s = Math.abs(layers[li][a] * layers[li + 1][b]);
+        n.strokeStyle = css("--cool"); n.globalAlpha = 0.04 + 0.35 * s;
+        n.beginPath(); n.moveTo(...pos[li][a]); n.lineTo(...pos[li + 1][b]); n.stroke();
+      }
+    }
+    n.globalAlpha = 1;
+    pos.forEach((P, li) => P.forEach(([x, y], j) => {
+      const v = layers[li][j], last = li === layers.length - 1, chosen = last && la && la.action === j;
+      n.beginPath(); n.arc(x, y, last ? 9 : 6, 0, Math.PI * 2);
+      n.fillStyle = chosen ? css("--accent") : css("--panel-2"); n.fill();
+      n.globalAlpha = Math.min(1, Math.abs(v)); n.fillStyle = chosen ? css("--accent") : css("--cool"); n.fill(); n.globalAlpha = 1;
+      n.strokeStyle = css("--line"); n.lineWidth = 1.5; n.stroke();
+    }));
+  }
+
+  // --------------------------------------------------------- loop
+  let acc = 0, last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!state.paused) {
+      acc += dt * C.FPS * state.speed;
+      let steps = 0;
+      while (acc >= 1 && steps < 40) { tick(); acc -= 1; steps++; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  // --------------------------------------------------------- batch stress test
+  async function runBatch() {
+    const btn = $("btn-batch"), out = $("batch-result");
+    if (state.pilot === "human") { out.hidden = false; out.innerHTML = '<span style="grid-column:1/-1">Pick an AI pilot to run the stress test.</span>'; return; }
+    const pol = state.policies[state.pilot]; if (!pol) return;
+    btn.disabled = true; out.hidden = false;
+    const c = cond(); const res = { landed: 0, pad: 0, crashed: 0, timeout: 0, ret: 0 }; const N = 50;
+    const env = new LunarLander({ continuous: false, gravity: c.gravity, enableWind: c.windPower > 0 || c.turbulencePower > 0, windPower: c.windPower, turbulencePower: c.turbulencePower });
+    for (let ep = 0; ep < N; ep++) {
+      let obs = env.reset(5000 + ep), r, ret = 0;
+      do { r = env.step(pol.act(obs).action); obs = r.obs; ret += r.reward; } while (!r.terminated && !r.truncated);
+      res.ret += ret;
+      if (r.outcome === "landed") { res.landed++; if (Math.abs(obs[0]) <= 0.2) res.pad++; } else if (r.outcome === "timeout") res.timeout++; else res.crashed++;
+      if (ep % 5 === 4) { btn.textContent = `Flying… ${ep + 1}/${N}`; await new Promise((r) => setTimeout(r, 0)); }
+    }
+    out.innerHTML = `<div><b style="color:var(--good)">${Math.round((res.pad / N) * 100)}%</b><small>on the pad</small></div>`
+      + `<div><b style="color:var(--bad)">${Math.round((res.crashed / N) * 100)}%</b><small>crashed</small></div>`
+      + `<div><b>${Math.round(res.ret / N)}</b><small>avg score</small></div>`;
+    btn.textContent = "Run 50 landings"; btn.disabled = false;
+  }
+
+  // --------------------------------------------------------- wiring
+  document.querySelectorAll('input[name="pilot"]').forEach((r) => r.addEventListener("change", () => {
+    state.pilot = r.value; $("pilot-note").textContent = NOTES[r.value];
+    try { localStorage.setItem("astro-pilot", r.value); } catch (e) {}
+    newEpisode();
+  }));
+  ["s-wind", "s-turb", "s-grav"].forEach((id) => $(id).addEventListener("input", syncOutputs));
+  ["s-wind", "s-turb", "s-grav"].forEach((id) => $(id).addEventListener("change", () => newEpisode()));
+  document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+    const [w, t, gr] = PRESETS[b.dataset.preset]; $("s-wind").value = w; $("s-turb").value = t; $("s-grav").value = gr; syncOutputs(); newEpisode();
+  }));
+  $("btn-new").addEventListener("click", () => newEpisode());
+  $("btn-pause").addEventListener("click", () => { state.paused = !state.paused; $("btn-pause").textContent = state.paused ? "Resume" : "Pause"; });
+  $("btn-speed").addEventListener("click", () => { state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : 1; $("btn-speed").textContent = `Speed ${state.speed}×`; });
+  $("btn-batch").addEventListener("click", runBatch);
+  const KEYS = ["ArrowUp", "ArrowLeft", "ArrowRight"];
+  addEventListener("keydown", (e) => { if (KEYS.includes(e.key) && state.pilot === "human") { state.keys.add(e.key); e.preventDefault(); } });
+  addEventListener("keyup", (e) => state.keys.delete(e.key));
+  // touch: hold left/right/centre third of the flight view
+  sim.addEventListener("pointerdown", (e) => {
+    if (state.pilot !== "human") return;
+    const r = sim.getBoundingClientRect(), f = (e.clientX - r.left) / r.width;
+    const k = f < 0.33 ? "ArrowLeft" : f > 0.67 ? "ArrowRight" : "ArrowUp"; state.keys.add(k); sim.setPointerCapture(e.pointerId);
+    const up = () => { state.keys.delete(k); sim.removeEventListener("pointerup", up); }; sim.addEventListener("pointerup", up);
+  });
+
+  // --------------------------------------------------------- boot
+  let saved = null; try { saved = localStorage.getItem("astro-pilot"); } catch (e) {}
+  if (saved && $("p-" + saved)) { $("p-" + saved).checked = true; state.pilot = saved; }
+  $("pilot-note").textContent = NOTES[state.pilot];
+  syncOutputs();
+  Promise.all(["robust", "nominal"].map((k) => fetch(`policies/${k}.json`).then((r) => r.json()).then((s) => (state.policies[k] = new MLPPolicy(s)))))
+    .catch(() => { $("pilot-note").textContent = "Could not load the trained networks. Reload the page to try again."; })
+    .finally(() => { newEpisode(1000003); requestAnimationFrame(frame); });
+})();
+</script>

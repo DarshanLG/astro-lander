@@ -1,0 +1,14 @@
+[project]
+name = "astro-lander"
+version = "1.0.0"
+description = "From-scratch PPO for rocket landing: reward-shaping study, domain randomization, and a live browser demo."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.setuptools]
+packages = ["astro_lander"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
