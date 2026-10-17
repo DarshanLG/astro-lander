@@ -5,7 +5,7 @@ Teaching a rocket to land itself with reinforcement learning, built as an engine
 - **PPO written from scratch** in PyTorch (GAE, clipped objective, vectorized rollouts, truncation bootstrapping, observation and reward normalization). It matches Stable-Baselines3 under identical hyperparameters.
 - **A reward-shaping study across 6 reward functions × 3 seeds.** Textbook potential-based shaping *fails*. The study traces the failure to three specific causes and shows that Gymnasium's default reward quietly fixes all three.
 - **Robustness via domain randomization.** Training with random gravity, wind and turbulence cuts crashes in unseen weather by **3.3×**.
-- **A live browser demo.** Gymnasium's Lunar Lander is ported line-for-line to JavaScript (planck.js), and the trained network runs in the page.
+- **[A live browser demo](https://darshanlg.github.io/astro-lander/web/).** Gymnasium's Lunar Lander is ported line-for-line to JavaScript (planck.js), and the trained networks transfer to it unchanged.
 
 <p align="center">
   <img src="results/landing_storm_nominal.gif" width="380" alt="Calm-trained agent crashing in a storm">
@@ -68,6 +68,23 @@ One agent trained in calm, default conditions. Another trained with gravity in [
 
 The main gain is **safety**. In conditions it can't fully handle, the randomized agent lands off the pad instead of crashing, with 3.3× fewer crashes across windy conditions and no cost in calm air. Randomized training is less consistent across seeds (on-pad rate in the default env: 100%, 54% and 93%). The grid compares the best seed of each training setup.
 
+### 4. Live demo and sim-to-sim transfer
+
+**[Try it in your browser](https://darshanlg.github.io/astro-lander/web/)**: watch either agent land, change wind, turbulence and gravity, fly it yourself, or run a 50-landing stress test.
+
+The page runs the trained networks on a line-for-line JavaScript port of Gymnasium's Lunar Lander (planck.js, a port of Box2D). The agents never trained in this engine, yet they behave the same way (200 landings per row):
+
+| Agent | Conditions | Python (Box2D): on pad / crash | Browser (planck.js): on pad / crash |
+|---|---|---|---|
+| Calm-trained | No wind | 100% / 0% | 100% / 0% |
+| Robust | No wind | 100% / 0% | 99% / 0% |
+| Calm-trained | Wind 10 | 60% / 33% | 71% / 23% |
+| Robust | Wind 10 | 78% / 5% | 86% / 5% |
+| Calm-trained | Storm, wind 18 | n/a | 30% / 61% |
+| Robust | Storm, wind 18 | n/a | 49% / 19% |
+
+Python "Wind 10" figures are from the stress-test grid at gravity −10 (40 episodes per cell).
+
 ## Project layout
 
 ```
@@ -112,6 +129,14 @@ python scripts/run_experiments.py
 
 # evaluate on 100 held-out episodes per run, stress tests, figures, GIFs -> results/
 python scripts/analyze.py
+
+# web demo: export the two showcase agents, then serve the folder
+python scripts/export_policy.py runs/disc_default_rand_s1/final.pt web/policies/robust.json --label "Robust"
+python scripts/export_policy.py runs/disc_default_s2/final.pt web/policies/nominal.json --label "Calm-trained"
+python -m http.server 8000 --directory web      # open http://localhost:8000
+
+# check a policy in the JavaScript engine (needs Node and `npm i planck@1.0.6`)
+node web/parity_test.js web/policies/robust.json 200 18 -10   # episodes, wind, gravity
 ```
 
 Full matrix: about an hour with 7 parallel jobs on an 8-core laptop CPU. No GPU needed.
@@ -136,7 +161,7 @@ Full matrix: about an hour with 7 parallel jobs on an 8-core laptop CPU. No GPU 
 | 3. Reward-shaping study | 6 reward functions × 3 seeds, diagnosis of PBRS failure | Done |
 | 4. Robustness | Domain-randomized training; wind × gravity stress grid | Done |
 | 5. Continuous control | Throttle-control agent | Done |
-| 6. Live demo | Browser demo, JS physics port, sim-to-sim parity numbers, GitHub Pages | Built; needs final agents |
+| 6. Live demo | Browser demo, JS physics port, sim-to-sim parity numbers, GitHub Pages | Done |
 | 7. Write-up | Results, figures, GIFs | Done |
 
 ## License

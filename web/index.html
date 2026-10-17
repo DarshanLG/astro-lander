@@ -1,5 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A rocket-landing agent trained with PPO written from scratch, running live in the browser.">
 <title>Astro Lander</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -25,6 +30,8 @@
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
 html, body { background: var(--ground); color: var(--fg); }
 body {
   font: 15px/1.5 var(--body);
@@ -38,7 +45,11 @@ h1 { font: 700 clamp(26px, 4vw, 38px)/1.05 var(--display); letter-spacing: 0.02e
 h1 span { color: var(--accent); }
 .lede { color: var(--muted); margin: 0; max-width: 62ch; }
 .console { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
-@media (max-width: 900px) { .console { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) {
+  .console { grid-template-columns: minmax(0, 1fr); }
+  .console > section { display: contents; }
+  .stage { order: 1; } .console > aside { order: 2; } .findings { order: 3; margin-top: 0; }
+}
 
 .stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--sky-top); }
 canvas#sim { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; max-width: 100%; }
@@ -63,7 +74,7 @@ button:focus-visible, input:focus-visible + label, input[type=range]:focus-visib
 button:disabled { opacity: 0.5; cursor: progress; }
 
 aside { display: grid; gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; align-content: start; }
 .card h2 { font: 600 11px/1 var(--body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
@@ -96,9 +107,24 @@ canvas#net { width: 100%; height: auto; aspect-ratio: 312 / 150; display: block;
 .keys { font-size: 12px; color: var(--muted); }
 kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--fg); }
 footer { color: var(--muted); font-size: 12.5px; max-width: 80ch; }
+.findings { align-items: start; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+@media (max-width: 700px) { .findings { grid-template-columns: minmax(0, 1fr); } }
+.note { margin: 0; color: var(--muted); font-size: 13px; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-bottom: 1px solid var(--panel-2); }
+td.num, th:nth-child(n+3) { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.good { color: var(--good); } td.bad { color: var(--bad); }
+.facts { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 13.5px; color: var(--fg); }
+.facts b { font-weight: 600; }
+.repo { color: var(--accent); font-weight: 500; font-size: 13.5px; text-decoration: none; }
+.repo:hover { text-decoration: underline; }
 footer a { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header>
@@ -125,6 +151,34 @@ footer a { color: var(--accent); }
           <button id="btn-speed">Speed 1×</button>
           <span class="spacer"></span>
           <span class="tally">this session: <b id="tl-land">0</b> landed · <b id="tl-crash">0</b> crashed · <b id="tl-to">0</b> timed out</span>
+        </div>
+      </div>
+      <div class="findings">
+        <div class="card">
+          <h2>Same agents, two physics engines</h2>
+          <p class="note">These networks were trained in Python (Box2D) and run here, unchanged, in planck.js. 200 landings per row in this browser engine.</p>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th scope="col">Pilot</th><th scope="col">Conditions</th><th scope="col">On pad</th><th scope="col">Crashed</th><th scope="col">Avg score</th></tr></thead>
+              <tbody>
+                <tr><td>Calm-trained</td><td>No wind</td><td class="num good">100%</td><td class="num">0%</td><td class="num">282</td></tr>
+                <tr><td>Robust</td><td>No wind</td><td class="num good">99%</td><td class="num">0%</td><td class="num">272</td></tr>
+                <tr><td>Calm-trained</td><td>Wind 10</td><td class="num">71%</td><td class="num">23%</td><td class="num">211</td></tr>
+                <tr><td>Robust</td><td>Wind 10</td><td class="num good">86%</td><td class="num">5%</td><td class="num">245</td></tr>
+                <tr><td>Calm-trained</td><td>Storm, wind 18</td><td class="num">30%</td><td class="num bad">61%</td><td class="num">99</td></tr>
+                <tr><td>Robust</td><td>Storm, wind 18</td><td class="num">49%</td><td class="num">19%</td><td class="num">187</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>What the project found</h2>
+          <ul class="facts">
+            <li><b>PPO written from scratch</b> scores 273 on 100 held-out landings, against 276 for Stable-Baselines3 with the same settings.</li>
+            <li><b>Textbook reward shaping crashed every time.</b> Ending an episode paid out the potential, and impact made the lander look better. Leaving the final step unshaped fixed it: 100% on the pad.</li>
+            <li><b>Training in random weather</b> cut crashes in wind from 36% to 11% in Python stress tests, with no cost in calm air.</li>
+          </ul>
+          <a class="repo" href="https://github.com/DarshanLG/astro-lander">Code, experiments and write-up on GitHub</a>
         </div>
       </div>
     </section>
@@ -171,7 +225,7 @@ footer a { color: var(--accent); }
   </div>
 
   <footer>
-    Physics: Gymnasium's LunarLander-v3, ported line-for-line from Python Box2D to planck.js. The agents were trained in Python and never saw this engine, so a good landing here also shows the policy transferring to a different simulator.
+    Physics: Gymnasium's LunarLander-v3, ported line-for-line from Python Box2D to planck.js.
     Both pilots use the same 8 → 64 → 64 → 4 network. "Robust AI" was trained with random gravity, wind and turbulence on every episode. "Calm-trained AI" only ever flew with default gravity and no wind.
   </footer>
 </div>
@@ -453,3 +507,5 @@ footer a { color: var(--accent); }
     .finally(() => { newEpisode(1000003); requestAnimationFrame(frame); });
 })();
 </script>
+</body>
+</html>
