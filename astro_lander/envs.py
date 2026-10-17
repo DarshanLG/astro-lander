@@ -120,12 +120,22 @@ class RewardShaping(gym.Wrapper):
               Russell, 1999) provably leaves the optimal policy unchanged while making
               credit assignment dense. Unlike the default reward it uses the agent's
               discount, which is what the guarantee requires.
+    pbrs_carry : like pbrs, but the final state keeps its own potential instead of 0.
+              Diagnostic variant. Because Phi < 0 everywhere, setting Phi(terminal)=0 pays
+              out +|Phi(s_last)| on *any* termination, crashes included; PPO finds that
+              "crash early" local optimum (see README). Carrying the potential removes the
+              termination payout, but exposes a second problem: a crash's collision
+              zeroes much of the velocity, so Phi(s_T) jumps up (~+70) on the impact step.
+    pbrs_freeze : like pbrs, but the terminal transition carries no shaping: the potential
+              stays at its last pre-terminal value. Removes both artifacts. This is what
+              Gymnasium's default reward does implicitly by overwriting the final reward
+              with +-100.
     naive   : sparse + a per-step bonus for being close / slow / upright (a *state* bonus,
               not a difference of potentials). Intuitive, but it pays the agent for
               hovering near the pad, which is a textbook source of reward hacking.
     """
 
-    SCHEMES = ("default", "sparse", "pbrs", "naive")
+    SCHEMES = ("default", "sparse", "pbrs", "pbrs_carry", "pbrs_freeze", "naive")
 
     def __init__(self, env: gym.Env, scheme: str = "default", gamma: float = 0.99):
         super().__init__(env)
@@ -158,9 +168,15 @@ class RewardShaping(gym.Wrapper):
         fuel = fuel_cost(self.env.unwrapped, action)
         r = self._terminal_reward(obs, terminated) - fuel
 
-        if self.scheme == "pbrs":
-            # Absorbing terminal state has potential 0 (required for policy invariance).
-            phi_next = 0.0 if terminated else lander_potential(obs)
+        if self.scheme in ("pbrs", "pbrs_carry", "pbrs_freeze"):
+            if not terminated:
+                phi_next = lander_potential(obs)
+            elif self.scheme == "pbrs":         # absorbing state has potential 0 (textbook)
+                phi_next = 0.0
+            elif self.scheme == "pbrs_carry":   # terminal state keeps its own potential
+                phi_next = lander_potential(obs)
+            else:                               # pbrs_freeze: no shaping on the final transition
+                phi_next = self._phi / self.gamma
             r += self.gamma * phi_next - self._phi
             self._phi = phi_next
         elif self.scheme == "naive":

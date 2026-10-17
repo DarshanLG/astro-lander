@@ -24,15 +24,15 @@ OUT.mkdir(exist_ok=True)
 
 # Validated categorical slots (light surface) + text tokens
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e0"
-SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
-SCHEME_ORDER = ["default", "pbrs", "naive", "sparse"]
-SCHEME_LABEL = {"default": "Gymnasium default", "pbrs": "Potential-based (PBRS)", "naive": "Naive state bonus", "sparse": "Sparse (terminal only)"}
+SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+SCHEME_ORDER = ["default", "pbrs_freeze", "pbrs_carry", "pbrs", "naive", "sparse"]
+SCHEME_LABEL = {"default": "Gymnasium default", "pbrs": "PBRS, Φ(end)=0 (textbook)", "pbrs_carry": "PBRS, Φ(end) from crash state", "pbrs_freeze": "PBRS, final step unshaped", "naive": "Naive state bonus", "sparse": "Sparse (terminal only)"}
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
     "axes.edgecolor": GRID, "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
     "text.color": INK, "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
     "axes.spines.top": False, "axes.spines.right": False, "font.size": 10.5, "axes.titlesize": 12,
-    "axes.titleweight": "semibold", "axes.titlelocation": "left", "lines.linewidth": 2,
+    "axes.titleweight": "bold", "axes.titlelocation": "left", "lines.linewidth": 2,
 })
 
 N_EVAL = 100
@@ -128,7 +128,7 @@ def fig_implementation(ev):
 
 def fig_shaping(ev):
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
-    panels = [("true_return", "True task return", (-450, 300), 1), ("on_pad", "Landed on the pad (%)", (0, 100), 100),
+    panels = [("true_return", "True task return", (-650, 320), 1), ("on_pad", "Landed on the pad (%)", (0, 100), 100),
               ("timeout", "Hovered until time-out (%)", (0, 100), 100)]
     for (col, title, ylim, scale), ax in zip(panels, axes):
         for i, s in enumerate(SCHEME_ORDER):
@@ -137,10 +137,10 @@ def fig_shaping(ev):
         ax.set(title=title, xlabel="environment steps", ylim=ylim); fmt_steps(ax)
     axes[0].axhline(200, color=INK2, lw=1, ls=(0, (4, 3)))
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, ncol=4, frameon=False, loc="lower center", bbox_to_anchor=(0.5, -0.02))
-    fig.suptitle("Reward shaping ablation: same agent, four reward functions (mean and min-max over seeds)",
-                 x=0.01, ha="left", fontweight="semibold")
-    fig.tight_layout(rect=(0, 0.07, 1, 1)); fig.savefig(OUT / "fig_reward_shaping.png", dpi=160); plt.close(fig)
+    fig.legend(h, l, ncol=3, frameon=False, loc="lower center", bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle("Reward shaping ablation: same agent, six reward functions (mean and min-max over seeds)",
+                 x=0.01, ha="left", fontweight="bold")
+    fig.tight_layout(rect=(0, 0.12, 1, 1)); fig.savefig(OUT / "fig_reward_shaping.png", dpi=160); plt.close(fig)
 
 
 def fig_stress(nominal_name, robust_name):
@@ -167,7 +167,7 @@ def fig_stress(nominal_name, robust_name):
                 ax.text(j, i, f"{v:.0f}%", ha="center", va="center", fontsize=9.5, color=INK if v < 55 else "#ffffff")
         ax.add_patch(matplotlib.patches.Rectangle((-0.5, 1.5), 1, 1, fill=False, ec=INK, lw=1.5))  # training condition
     fig.suptitle("On-pad landing rate under unseen conditions (40 held-out episodes per cell; box = default env)",
-                 x=0.01, ha="left", fontweight="semibold")
+                 x=0.01, ha="left", fontweight="bold")
     fig.tight_layout(); fig.savefig(OUT / "fig_robustness.png", dpi=160); plt.close(fig)
     return grids
 

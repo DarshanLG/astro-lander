@@ -11,7 +11,7 @@ from astro_lander.envs import RandomizationSpec
 p = argparse.ArgumentParser()
 p.add_argument("--config", type=str, default=None)
 p.add_argument("--seed", type=int, default=None)
-p.add_argument("--shaping", choices=["default", "sparse", "pbrs", "naive"], default=None)
+p.add_argument("--shaping", choices=["default", "sparse", "pbrs", "pbrs_carry", "pbrs_freeze", "naive"], default=None)
 p.add_argument("--continuous", action="store_true")
 p.add_argument("--randomize", action="store_true", help="train with gravity/wind/turbulence randomization")
 p.add_argument("--total-timesteps", type=int, default=None)

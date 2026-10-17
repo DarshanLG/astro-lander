@@ -59,7 +59,7 @@ def summarize(df: pd.DataFrame) -> dict:
 
 
 def stress_test(policy: Callable, base: EnvConfig, n_episodes: int = 30,
-                winds=(0.0, 5.0, 10.0, 15.0, 20.0), gravities=(-6.0, -8.0, -10.0, -12.0),
+                winds=(0.0, 5.0, 10.0, 15.0, 20.0), gravities=(-6.0, -8.0, -10.0, -11.5),
                 turbulence: float = 1.0) -> pd.DataFrame:
     """Success rate over a grid of (wind, gravity). wind=0 means wind disabled."""
     rows = []

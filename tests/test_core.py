@@ -120,3 +120,30 @@ def test_train_smoke_and_reload(tmp_path, continuous):
     df = run_episodes(pol, cfg.env, n_episodes=2)
     s = summarize(df)
     assert s["episodes"] == 2 and (run / "metrics.csv").exists()
+
+
+def test_pbrs_terminal_payout_vs_carry():
+    """Textbook PBRS pays back -Phi(s_last) at termination; pbrs_carry does not."""
+    env0 = make_env(EnvConfig(shaping="pbrs", gamma=1.0), seed=0)
+    envc = make_env(EnvConfig(shaping="pbrs_carry", gamma=1.0), seed=0)
+    for e in (env0, envc):
+        e.reset(seed=5)
+    while True:  # coast until the lander hits the ground
+        o0, r0, t0, _, _ = env0.step(0)
+        oc, rc, tc, _, _ = envc.step(0)
+        if t0:
+            break
+    assert tc
+    assert r0 - rc == pytest.approx(-lander_potential(oc), abs=1e-6)
+
+
+def test_pbrs_freeze_final_step_has_no_shaping():
+    env = make_env(EnvConfig(shaping="pbrs_freeze", gamma=0.99), seed=0)
+    sparse = make_env(EnvConfig(shaping="sparse", gamma=0.99), seed=0)
+    env.reset(seed=5); sparse.reset(seed=5)
+    while True:
+        _, r, t, _, _ = env.step(0)
+        _, rs, _, _, _ = sparse.step(0)
+        if t:
+            break
+    assert r == pytest.approx(rs)  # terminal transition: sparse reward only

@@ -7,7 +7,7 @@
 Finished runs are skipped, so you can stop and restart at any time.
 Groups:
     impl      from-scratch PPO vs Stable-Baselines3 (default reward)
-    shaping   reward-shaping ablation: default / pbrs / naive / sparse
+    shaping   reward-shaping ablation: default / pbrs / pbrs_carry / pbrs_freeze / naive / sparse
     robust    domain-randomized training (2M steps)
     cont      continuous-action agent (2M steps)
 """
@@ -25,7 +25,7 @@ def jobs_for(group, seed):
         return [(f"runs/disc_default_s{seed}/final.pt", t + ["--shaping", "default"]),
                 (f"runs/sb3_disc_default_s{seed}/eval_summary.json", [PY, "scripts/sb3_baseline.py", "--seed", str(seed)])]
     if group == "shaping":
-        return [(f"runs/disc_{s}_s{seed}/final.pt", t + ["--shaping", s]) for s in ("default", "pbrs", "naive", "sparse")]
+        return [(f"runs/disc_{s}_s{seed}/final.pt", t + ["--shaping", s]) for s in ("default", "pbrs", "pbrs_carry", "pbrs_freeze", "naive", "sparse")]
     if group == "robust":
         return [(f"runs/disc_default_rand_s{seed}/final.pt", t + ["--randomize", "--total-timesteps", "2000000"])]
     if group == "cont":
