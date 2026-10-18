@@ -60,7 +60,12 @@ canvas#sim { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; max
 .score small { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
 .telemetry { background: rgba(10, 12, 26, 0.72); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .telemetry span { color: var(--fg); }
+.hud .restart { pointer-events: auto; align-self: flex-start; background: rgba(10, 12, 26, 0.72); font-family: var(--body); font-size: 12px; padding: 7px 11px; }
 .banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font: 700 clamp(20px, 4vw, 34px)/1 var(--display); letter-spacing: 0.06em; padding: 10px 18px; border-radius: 8px; background: rgba(10, 12, 26, 0.8); border: 1px solid var(--line); text-transform: uppercase; }
+.startgate { position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%); display: grid; gap: 10px; justify-items: center; text-align: center; padding: 16px 20px; border-radius: 10px; background: rgba(10, 12, 26, 0.85); border: 1px solid var(--line); max-width: calc(100% - 32px); }
+.startgate[hidden] { display: none; }
+.startgate p { margin: 0; font-size: 13px; color: var(--muted); }
+.startgate button { font-size: 15px; padding: 11px 20px; }
 .banner.good { color: var(--good); } .banner.bad { color: var(--bad); } .banner.warn { color: var(--accent); }
 .stagebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--panel); }
 .stagebar .spacer { flex: 1; }
@@ -138,6 +143,7 @@ footer a { color: var(--accent); }
         <canvas id="sim" width="900" height="600" aria-label="Lunar lander simulation"></canvas>
         <div class="hud">
           <div class="score"><small>Score</small><b id="score">0</b></div>
+          <button class="restart" id="btn-restart" title="Restart (R)">↻ Restart</button>
           <div class="telemetry">
             alt <span id="t-alt">0.00</span> · vel <span id="t-vel">0.00</span><br>
             tilt <span id="t-tilt">0°</span> · fuel <span id="t-fuel">0.0</span><br>
@@ -145,6 +151,10 @@ footer a { color: var(--accent); }
           </div>
         </div>
         <div class="banner" id="banner" hidden></div>
+        <div class="startgate" id="startgate" hidden>
+          <button class="primary" id="btn-start">Start game</button>
+          <p id="gate-note"></p>
+        </div>
         <div class="stagebar">
           <button class="primary" id="btn-new">New landing</button>
           <button id="btn-pause">Pause</button>
@@ -247,7 +257,7 @@ footer a { color: var(--accent); }
   };
 
   const state = { pilot: "robust", policies: {}, paused: false, speed: 1, env: null, obs: null, score: 0, fuel: 0,
-    done: false, outcome: null, keys: new Set(), lastAct: null, tally: { landed: 0, crashed: 0, timeout: 0 } };
+    done: false, waiting: false, outcome: null, keys: new Set(), lastAct: null, tally: { landed: 0, crashed: 0, timeout: 0 } };
 
   // --------------------------------------------------------- conditions
   const cond = () => ({ windPower: +$("s-wind").value, turbulencePower: +$("s-turb").value, gravity: +$("s-grav").value });
@@ -266,7 +276,19 @@ footer a { color: var(--accent); }
       windPower: c.windPower, turbulencePower: c.turbulencePower });
     state.obs = state.env.reset(seed);
     state.score = 0; state.fuel = 0; state.done = false; state.outcome = null;
+    clearTimeout(state.restartT);
+    state.keys.clear();
+    state.waiting = state.pilot === "human";
+    $("btn-start").textContent = "Start game";
+    $("gate-note").innerHTML = "Press <kbd>Space</kbd>, <kbd>Enter</kbd> or an arrow key to launch";
+    $("startgate").hidden = !state.waiting;
     $("banner").hidden = true;
+  }
+
+  function startGame() {
+    if (!state.waiting) return;
+    state.waiting = false; acc = 0;
+    $("startgate").hidden = true;
   }
 
   function chooseAction() {
@@ -283,7 +305,7 @@ footer a { color: var(--accent); }
   }
 
   function tick() {
-    if (state.done) return;
+    if (state.done || state.waiting) return;
     const a = chooseAction();
     const r = state.env.step(a);
     state.obs = r.obs; state.score += r.reward;
@@ -300,7 +322,12 @@ footer a { color: var(--accent); }
       state.tally[key]++;
       $("tl-land").textContent = state.tally.landed; $("tl-crash").textContent = state.tally.crashed; $("tl-to").textContent = state.tally.timeout;
       clearTimeout(state.restartT);
-      if (state.pilot !== "human") state.restartT = setTimeout(() => newEpisode(), 2200);
+      if (state.pilot === "human") {
+        state.keys.clear();
+        $("btn-start").textContent = "↻ Restart";
+        $("gate-note").innerHTML = "Press <kbd>R</kbd>, <kbd>Space</kbd> or <kbd>Enter</kbd> to try again";
+        $("startgate").hidden = false;
+      } else state.restartT = setTimeout(() => newEpisode(), 2200);
     }
   }
 
@@ -487,11 +514,23 @@ footer a { color: var(--accent); }
   $("btn-speed").addEventListener("click", () => { state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : 1; $("btn-speed").textContent = `Speed ${state.speed}×`; });
   $("btn-batch").addEventListener("click", runBatch);
   const KEYS = ["ArrowUp", "ArrowLeft", "ArrowRight"];
-  addEventListener("keydown", (e) => { if (KEYS.includes(e.key) && state.pilot === "human") { state.keys.add(e.key); e.preventDefault(); } });
+  $("btn-start").addEventListener("click", () => (state.done ? newEpisode() : startGame()));
+  $("btn-restart").addEventListener("click", () => newEpisode());
+  addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== "radio";
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "r" || e.key === "R") { e.preventDefault(); newEpisode(); return; }
+    if (state.pilot !== "human") return;
+    if (e.target.id === "btn-start" && (e.key === " " || e.key === "Enter")) return; // native click handles it
+    if (state.done && (e.key === " " || e.key === "Enter")) { e.preventDefault(); newEpisode(); return; }
+    if (state.waiting && (e.key === " " || e.key === "Enter" || KEYS.includes(e.key))) { e.preventDefault(); startGame(); }
+    if (KEYS.includes(e.key)) { state.keys.add(e.key); e.preventDefault(); }
+  });
   addEventListener("keyup", (e) => state.keys.delete(e.key));
   // touch: hold left/right/centre third of the flight view
   sim.addEventListener("pointerdown", (e) => {
     if (state.pilot !== "human") return;
+    if (state.waiting) { startGame(); return; }
     const r = sim.getBoundingClientRect(), f = (e.clientX - r.left) / r.width;
     const k = f < 0.33 ? "ArrowLeft" : f > 0.67 ? "ArrowRight" : "ArrowUp"; state.keys.add(k); sim.setPointerCapture(e.pointerId);
     const up = () => { state.keys.delete(k); sim.removeEventListener("pointerup", up); }; sim.addEventListener("pointerup", up);
